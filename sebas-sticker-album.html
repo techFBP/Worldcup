@@ -353,6 +353,95 @@
     .stats-row { gap: 6px; }
     .header-title { font-size: clamp(38px, 12vw, 56px); }
   }
+
+  /* ── FAB ── */
+  .fab {
+    position: fixed; bottom: 24px; right: 20px; z-index: 90;
+    width: 56px; height: 56px; border-radius: 50%;
+    background: linear-gradient(135deg, #1a6bff, #0044cc);
+    color: #fff; font-size: 28px; font-weight: 300;
+    border: none; cursor: pointer;
+    box-shadow: 0 6px 20px rgba(26,107,255,0.45);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .15s, box-shadow .15s;
+    line-height: 1;
+  }
+  .fab:hover { transform: scale(1.08); box-shadow: 0 8px 28px rgba(26,107,255,0.55); }
+  .fab:active { transform: scale(.93); }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(7,21,74,0.55); backdrop-filter: blur(4px);
+    display: flex; align-items: flex-end; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity .25s;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal-sheet {
+    background: var(--card); border-radius: 20px 20px 0 0;
+    padding: 20px 20px 36px; width: 100%; max-width: 480px;
+    transform: translateY(100%);
+    transition: transform .3s cubic-bezier(.4,0,.2,1);
+    box-shadow: 0 -8px 40px rgba(13,22,64,0.2);
+  }
+  .modal-overlay.open .modal-sheet { transform: translateY(0); }
+  .modal-handle {
+    width: 40px; height: 4px; border-radius: 2px;
+    background: var(--border); margin: 0 auto 18px;
+  }
+  .modal-title {
+    font-family: 'Bangers', sans-serif; font-size: 22px;
+    letter-spacing: 1px; color: var(--text); margin-bottom: 18px; text-align: center;
+  }
+  .modal-type-row {
+    display: flex; gap: 10px; margin-bottom: 18px;
+  }
+  .modal-type-btn {
+    flex: 1; padding: 12px; border-radius: 10px;
+    border: 2px solid var(--border); background: var(--card);
+    font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 900;
+    cursor: pointer; transition: all .15s; text-align: center;
+    text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted);
+  }
+  .modal-type-btn.active.miss {
+    background: var(--red-light); border-color: var(--red); color: var(--red);
+  }
+  .modal-type-btn.active.dup {
+    background: var(--gold-light); border-color: #c28b00; color: var(--gold);
+  }
+  .modal-field { margin-bottom: 14px; }
+  .modal-label {
+    font-size: 11px; font-weight: 900; text-transform: uppercase;
+    letter-spacing: .1em; color: var(--text-muted); margin-bottom: 6px; display: block;
+  }
+  .modal-input {
+    width: 100%; padding: 13px 16px;
+    border: 2px solid var(--border); border-radius: 10px;
+    font-family: 'Nunito', sans-serif; font-size: 16px; font-weight: 700;
+    color: var(--text); outline: none; background: var(--card);
+    transition: border-color .2s, box-shadow .2s;
+    -webkit-appearance: none;
+  }
+  .modal-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-glow); }
+  .modal-input.err { border-color: var(--red); box-shadow: 0 0 0 3px var(--red-glow); }
+  .modal-copies-row { display: flex; gap: 10px; align-items: center; }
+  .modal-copies-row .modal-input { flex: 1; }
+  .modal-err {
+    font-size: 12px; font-weight: 800; color: var(--red);
+    margin-top: 6px; min-height: 18px;
+  }
+  .modal-submit {
+    width: 100%; padding: 15px; border-radius: 12px; border: none;
+    background: linear-gradient(135deg, #1a6bff, #0044cc);
+    color: #fff; font-family: 'Nunito', sans-serif;
+    font-size: 15px; font-weight: 900; cursor: pointer;
+    margin-top: 6px; letter-spacing: .05em; text-transform: uppercase;
+    box-shadow: 0 4px 16px rgba(26,107,255,0.35);
+    transition: filter .15s, transform .15s;
+  }
+  .modal-submit:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .modal-submit:active { transform: scale(.97); }
 </style>
 </head>
 <body>
@@ -512,8 +601,10 @@
 
   var owned = expandRanges(OWNED_STR);
   var dupsBase = parseDups(DUPS_STR);
+  var owned = expandRanges(OWNED_STR);
+  var dupsBase = parseDups(DUPS_STR);
   var gotSet = new Set();
-  var tradedSet = new Set();
+  var tradedCounts = {}; // n -> how many traded so far
   var missingNums = [];
   var dupNums = [];
 
@@ -524,10 +615,19 @@
   }
   recompute();
 
+  function totalTradedCount() {
+    return Object.values(tradedCounts).reduce(function(a,b){return a+b;},0);
+  }
+
   function updateStats() {
+    var totalDupCopies = Object.keys(dupsBase).reduce(function(sum, k) {
+      var remaining = dupsBase[+k] - (tradedCounts[+k] || 0);
+      return sum + Math.max(0, remaining);
+    }, 0);
+    var activeDupNums = dupNums.filter(function(n){
+      return (dupsBase[n] - (tradedCounts[n] || 0)) > 0;
+    }).length;
     var totalMiss = missingNums.length - gotSet.size;
-    var totalDupCopies = Object.values(dupsBase).reduce(function(a,b){return a+b;},0) - tradedSet.size;
-    var activeDupNums = dupNums.filter(function(n){return !tradedSet.has(n);}).length;
     var pct = Math.round((owned.size + gotSet.size) / TOTAL * 100);
     document.getElementById('s-owned').textContent = owned.size + gotSet.size;
     document.getElementById('s-missing').textContent = totalMiss;
@@ -536,7 +636,7 @@
     document.getElementById('prog-pct').textContent = pct + '%';
     document.getElementById('tab-miss-cnt').textContent = totalMiss;
     document.getElementById('tab-dup-cnt').textContent = activeDupNums;
-    var pending = gotSet.size + tradedSet.size;
+    var pending = gotSet.size + totalTradedCount();
     var bar = document.getElementById('save-bar');
     if (pending > 0) {
       bar.classList.remove('hidden');
@@ -571,14 +671,13 @@
       chip.textContent = sec[3] + ' ' + pos;
       chip.addEventListener('click', function(){ toggleGot(this, n, sec); });
     } else {
-      var copies = (dupsBase[n] || 0) + 1;
-      var traded = tradedSet.has(n);
-      chip.className = 'sticker-chip dup' + (traded ? ' traded' : '');
+      var remaining = (dupsBase[n] || 0) - (tradedCounts[n] || 0);
+      chip.className = 'sticker-chip dup' + (remaining === 0 ? ' traded' : '');
       chip.textContent = sec[3] + ' ' + pos;
-      if (!traded) {
+      if (remaining > 0) {
         var badge = document.createElement('span');
         badge.className = 'dup-badge';
-        badge.textContent = 'x' + copies;
+        badge.textContent = 'x' + remaining;
         chip.appendChild(badge);
       }
       chip.addEventListener('click', function(){ toggleTraded(this, n, sec); });
@@ -595,9 +694,6 @@
     groups.forEach(function(g) {
       var sec = g.sec; var numList = g.list;
       var sStart=sec[0], sEnd=sec[1], sName=sec[2], sCode=sec[3], sFlag=sec[4];
-      var secTotal = sEnd - sStart + 1;
-      var ownedCount = 0;
-      for (var i=sStart; i<=sEnd; i++) if (owned.has(i)) ownedCount++;
 
       var card = document.createElement('div');
       card.className = 'country-card';
@@ -609,26 +705,53 @@
         pillCls = isComplete ? 'done' : 'miss';
         pillTxt = isComplete ? 'Complete!' : numList.filter(function(n){return !gotSet.has(n);}).length + ' missing';
       } else {
-        isComplete = numList.every(function(n){return tradedSet.has(n);});
+        isComplete = numList.every(function(n){return (dupsBase[n] - (tradedCounts[n]||0)) === 0;});
         pillCls = isComplete ? 'done' : 'dup';
-        pillTxt = isComplete ? 'All traded!' : numList.filter(function(n){return !tradedSet.has(n);}).length + ' available';
+        pillTxt = isComplete ? 'All traded!' : numList.filter(function(n){return (dupsBase[n]-(tradedCounts[n]||0))>0;}).length + ' available';
       }
 
       var head = document.createElement('div');
       head.className = 'country-head';
-      head.innerHTML = '<span class="country-flag">' + sFlag + '</span>' +
-        '<div class="country-info"><div class="country-name-text">' + sName + '</div>' +
-        '<div class="country-code-text">' + sCode + ' &middot; ' + ownedCount + '/' + secTotal + ' owned</div></div>' +
-        '<span class="country-pill ' + pillCls + '" data-pill>' + pillTxt + '</span>' +
-        '<span class="country-chevron">&#9660;</span>';
-      head.addEventListener('click', function() { card.classList.toggle('open'); });
+
+      var flagEl = document.createElement('span');
+      flagEl.className = 'country-flag';
+      flagEl.textContent = sFlag;
+
+      var info = document.createElement('div');
+      info.className = 'country-info';
+      var nameEl = document.createElement('div');
+      nameEl.className = 'country-name-text';
+      nameEl.textContent = sName;
+      var codeEl = document.createElement('div');
+      codeEl.className = 'country-code-text';
+      codeEl.textContent = sCode + ' · ' + numList.length + (type==='miss'?' stickers':' duplicates');
+      info.appendChild(nameEl);
+      info.appendChild(codeEl);
+
+      var pill = document.createElement('div');
+      pill.className = 'country-pill ' + pillCls;
+      pill.textContent = pillTxt;
+      pill.id = 'pill-' + type + '-' + sCode;
+
+      var chev = document.createElement('span');
+      chev.className = 'country-chevron';
+      chev.textContent = '▼';
+
+      head.appendChild(flagEl);
+      head.appendChild(info);
+      head.appendChild(pill);
+      head.appendChild(chev);
 
       var body = document.createElement('div');
       body.className = 'country-body';
-      var grid = document.createElement('div');
-      grid.className = 'chip-grid';
-      numList.forEach(function(n) { grid.appendChild(makeChip(n, type, sec)); });
-      body.appendChild(grid);
+      var chipGrid = document.createElement('div');
+      chipGrid.className = 'chip-grid';
+      numList.forEach(function(n){ chipGrid.appendChild(makeChip(n, type, sec)); });
+      body.appendChild(chipGrid);
+
+      head.addEventListener('click', function(){
+        card.classList.toggle('open');
+      });
 
       card.appendChild(head);
       card.appendChild(body);
@@ -636,107 +759,251 @@
     });
   }
 
-  function rebuildAll() {
-    buildSection(document.getElementById('sections-missing'), groupBySection(missingNums), 'miss');
-    buildSection(document.getElementById('sections-dups'), groupBySection(dupNums), 'dup');
-    updateStats();
-    applyFilter();
-  }
-
-  function updatePill(chip, type) {
+  function updateSectionPill(chip, n, type, sec) {
+    var sCode = sec[3];
+    var pill = document.getElementById('pill-' + type + '-' + sCode);
+    if (!pill) return;
     var card = chip.closest('.country-card');
-    var pill = card.querySelector('[data-pill]');
-    var chips = Array.from(card.querySelectorAll('.sticker-chip'));
+    var chips = card ? card.querySelectorAll('.sticker-chip') : [];
+    var numList = Array.from(chips).map(function(c){ return +c.dataset.n; }).filter(function(x){return !isNaN(x);});
+    // fallback: just update pill text
     if (type === 'miss') {
-      var notGot = chips.filter(function(c){return !c.classList.contains('got');}).length;
-      pill.className = 'country-pill ' + (notGot===0 ? 'done' : 'miss');
-      pill.textContent = notGot===0 ? 'Complete!' : notGot + ' missing';
+      var remaining = Array.from(card.querySelectorAll('.sticker-chip.miss:not(.got)')).length;
+      var isComplete = remaining === 0;
+      pill.className = 'country-pill ' + (isComplete ? 'done' : 'miss');
+      pill.textContent = isComplete ? 'Complete!' : remaining + ' missing';
     } else {
-      var notTraded = chips.filter(function(c){return !c.classList.contains('traded');}).length;
-      pill.className = 'country-pill ' + (notTraded===0 ? 'done' : 'dup');
-      pill.textContent = notTraded===0 ? 'All traded!' : notTraded + ' available';
+      var available = Array.from(card.querySelectorAll('.sticker-chip.dup:not(.traded)')).length;
+      var isComplete = available === 0;
+      pill.className = 'country-pill ' + (isComplete ? 'done' : 'dup');
+      pill.textContent = isComplete ? 'All traded!' : available + ' available';
     }
   }
 
   function toggleGot(chip, n, sec) {
-    if (gotSet.has(n)) { gotSet.delete(n); chip.classList.remove('got'); }
-    else { gotSet.add(n); chip.classList.add('got'); }
-    updatePill(chip, 'miss');
+    if (gotSet.has(n)) {
+      gotSet.delete(n);
+      chip.classList.remove('got');
+      showToast('Removed ' + sec[3] + ' from got list');
+    } else {
+      gotSet.add(n);
+      chip.classList.add('got');
+      showToast('Got ' + sec[3] + '!');
+    }
     updateStats();
+    updateSectionPill(chip, n, 'miss', sec);
   }
 
   function toggleTraded(chip, n, sec) {
-    if (tradedSet.has(n)) {
-      tradedSet.delete(n); chip.classList.remove('traded');
-      var copies = (dupsBase[n]||0) + 1;
-      if (!chip.querySelector('.dup-badge')) {
-        var b = document.createElement('span');
-        b.className = 'dup-badge'; b.textContent = 'x' + copies;
-        chip.appendChild(b);
+    var base = dupsBase[n] || 0;
+    var traded = tradedCounts[n] || 0;
+    var remaining = base - traded;
+    if (remaining > 0) {
+      // decrement: mark one as traded
+      tradedCounts[n] = traded + 1;
+      remaining--;
+      var badge = chip.querySelector('.dup-badge');
+      if (remaining === 0) {
+        chip.classList.add('traded');
+        if (badge) badge.remove();
+        showToast('All ' + sec[3] + ' duplicates traded!');
+      } else {
+        if (badge) badge.textContent = 'x' + remaining;
+        showToast('Traded 1 · ' + remaining + ' left');
       }
     } else {
-      tradedSet.add(n); chip.classList.add('traded');
-      var b2 = chip.querySelector('.dup-badge');
-      if (b2) b2.remove();
+      // undo: add one back
+      tradedCounts[n] = Math.max(0, traded - 1);
+      remaining = base - tradedCounts[n];
+      chip.classList.remove('traded');
+      var badge = chip.querySelector('.dup-badge');
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'dup-badge';
+        chip.appendChild(badge);
+      }
+      badge.textContent = 'x' + remaining;
+      showToast('Undo · ' + remaining + ' available');
     }
-    updatePill(chip, 'dup');
     updateStats();
+    updateSectionPill(chip, n, 'dups', sec);
   }
-
-  // Expose globals for inline HTML handlers
-  window.applyFilter = function() {
-    var val = document.getElementById('filter-input').value.toLowerCase().trim();
-    Array.from(document.querySelectorAll('.country-card')).forEach(function(c) {
-      c.style.display = (!val || c.dataset.country.indexOf(val) > -1) ? '' : 'none';
-    });
-  };
-  window.clearFilter = function() {
-    document.getElementById('filter-input').value = '';
-    window.applyFilter();
-  };
-  function applyFilter() { window.applyFilter(); }
-
-  window.confirmChanges = function() {
-    gotSet.forEach(function(n){ owned.add(n); });
-    tradedSet.forEach(function(n){ delete dupsBase[n]; });
-    gotSet.clear(); tradedSet.clear();
-    recompute(); rebuildAll();
-    showToast('Changes saved!');
-  };
-  window.discardChanges = function() {
-    gotSet.clear(); tradedSet.clear();
-    recompute(); rebuildAll();
-    showToast('Changes discarded');
-  };
 
   function showToast(msg) {
     var t = document.getElementById('toast');
-    t.textContent = msg; t.classList.add('show');
-    setTimeout(function(){ t.classList.remove('show'); }, 2500);
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(function(){ t.classList.remove('show'); }, 2200);
   }
 
-  // Tabs
-  var currentTab = 'missing';
+  function confirmChanges() {
+    gotSet.forEach(function(n){ owned.add(n); });
+    gotSet.clear();
+    Object.keys(tradedCounts).forEach(function(k) {
+      var n = +k;
+      dupsBase[n] -= tradedCounts[n];
+      if (dupsBase[n] <= 0) delete dupsBase[n];
+    });
+    tradedCounts = {};
+    recompute();
+    renderAll();
+    updateStats();
+    showToast('✅ Changes saved!');
+  }
+
+  function discardChanges() {
+    gotSet.clear();
+    tradedCounts = {};
+    renderAll();
+    updateStats();
+    showToast('↩ Changes discarded');
+  }
+
+  var activeTab = 'miss';
   function switchTab(tab) {
-    currentTab = tab;
-    document.getElementById('panel-missing').style.display = tab==='missing' ? 'block' : 'none';
-    document.getElementById('panel-dups').style.display    = tab==='dups'    ? 'block' : 'none';
-    Array.from(document.querySelectorAll('.tab-btn')).forEach(function(b){ b.classList.remove('active'); });
-    document.querySelector(tab==='missing' ? '.tab-btn.miss' : '.tab-btn.dups').classList.add('active');
-    history.replaceState(null, '', '#' + tab);
+    activeTab = tab;
+    document.getElementById('panel-missing').classList.toggle('active', tab==='miss');
+    document.getElementById('panel-dups').classList.toggle('active', tab==='dups');
+    document.querySelectorAll('.tab-btn').forEach(function(b, i){
+      b.classList.toggle('active', (i===0 && tab==='miss') || (i===1 && tab==='dups'));
+    });
   }
 
-  document.querySelector('.tab-btn.miss').addEventListener('click', function(){ switchTab('missing'); });
-  document.querySelector('.tab-btn.dups').addEventListener('click', function(){ switchTab('dups'); });
+  function applyFilter() {
+    var q = document.getElementById('filter-input').value.trim().toLowerCase();
+    document.querySelectorAll('.country-card').forEach(function(card){
+      var match = !q || card.dataset.country.includes(q);
+      card.style.display = match ? '' : 'none';
+    });
+  }
 
-  document.getElementById('panel-missing').style.display = 'block';
-  document.getElementById('panel-dups').style.display    = 'none';
+  function clearFilter() {
+    document.getElementById('filter-input').value = '';
+    applyFilter();
+  }
 
-  rebuildAll();
+  function renderAll() {
+    var missingGroups = groupBySection(missingNums);
+    buildSection(document.getElementById('sections-missing'), missingGroups, 'miss');
 
-  if (window.location.hash === '#dups') switchTab('dups');
+    var activeDups = dupNums.filter(function(n){
+      return (dupsBase[n] - (tradedCounts[n]||0)) > 0;
+    });
+    var dupGroups = groupBySection(activeDups);
+    buildSection(document.getElementById('sections-dups'), dupGroups, 'dups');
+  }
+
+  document.querySelectorAll('.tab-btn').forEach(function(btn, idx){
+    btn.addEventListener('click', function(){ switchTab(idx===0?'miss':'dups'); });
+  });
+
+  // ── ADD STICKER MODAL ──
+  var modalType = 'miss';
+
+  document.getElementById('fab-btn').addEventListener('click', function(){
+    document.getElementById('modal-overlay').classList.add('open');
+    document.getElementById('m-num').value = '';
+    document.getElementById('m-err').textContent = '';
+    document.getElementById('m-num').focus();
+  });
+  document.getElementById('modal-overlay').addEventListener('click', function(e){
+    if (e.target === this) closeModal();
+  });
+
+  function closeModal() {
+    document.getElementById('modal-overlay').classList.remove('open');
+  }
+
+  function setModalType(type) {
+    modalType = type;
+    document.getElementById('mtype-miss').classList.toggle('active', type==='miss');
+    document.getElementById('mtype-dup').classList.toggle('active', type==='dup');
+    document.getElementById('m-copies-field').style.display = type==='dup' ? '' : 'none';
+  }
+
+  function adjCopies(delta) {
+    var el = document.getElementById('m-copies');
+    el.value = Math.max(1, Math.min(10, (+el.value || 1) + delta));
+  }
+
+  function submitSticker() {
+    var numEl = document.getElementById('m-num');
+    var errEl = document.getElementById('m-err');
+    var n = parseInt(numEl.value, 10);
+    errEl.textContent = '';
+    numEl.classList.remove('err');
+
+    if (isNaN(n) || n < 0 || n >= TOTAL) {
+      errEl.textContent = 'Enter a valid sticker number (0–' + (TOTAL-1) + ')';
+      numEl.classList.add('err');
+      return;
+    }
+
+    if (modalType === 'miss') {
+      if (!owned.has(n)) {
+        errEl.textContent = 'Sticker ' + n + ' is already in the missing list.';
+        numEl.classList.add('err');
+        return;
+      }
+      owned.delete(n);
+      recompute();
+      renderAll();
+      updateStats();
+      closeModal();
+      showToast('Added #' + n + ' to missing');
+    } else {
+      var copies = Math.max(1, parseInt(document.getElementById('m-copies').value, 10) || 1);
+      if (dupsBase[n]) {
+        dupsBase[n] += copies;
+      } else {
+        dupsBase[n] = copies;
+      }
+      recompute();
+      renderAll();
+      updateStats();
+      closeModal();
+      showToast('Added #' + n + ' as duplicate (x' + (dupsBase[n]) + ')');
+    }
+  }
+
+  // Allow Enter key in number input
+  document.getElementById('m-num').addEventListener('keydown', function(e){
+    if (e.key === 'Enter') submitSticker();
+  });
+
+  renderAll();
+  updateStats();
 
 })();
 </script>
+
+<button class="fab" id="fab-btn" title="Add sticker">＋</button>
+
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">➕ Add Sticker</div>
+    <div class="modal-type-row">
+      <button class="modal-type-btn miss active" id="mtype-miss" onclick="setModalType('miss')">❌ Missing</button>
+      <button class="modal-type-btn dup" id="mtype-dup" onclick="setModalType('dup')">🔁 Duplicate</button>
+    </div>
+    <div class="modal-field">
+      <label class="modal-label" for="m-num">Sticker number</label>
+      <input class="modal-input" id="m-num" type="number" min="0" max="994" placeholder="e.g. 42" inputmode="numeric"/>
+    </div>
+    <div class="modal-field" id="m-copies-field" style="display:none">
+      <label class="modal-label">Extra copies (duplicates)</label>
+      <div class="modal-copies-row">
+        <button class="modal-type-btn" style="flex:0;padding:12px 18px;font-size:20px" onclick="adjCopies(-1)">−</button>
+        <input class="modal-input" id="m-copies" type="number" min="1" max="10" value="1" inputmode="numeric" style="text-align:center"/>
+        <button class="modal-type-btn" style="flex:0;padding:12px 18px;font-size:20px" onclick="adjCopies(1)">＋</button>
+      </div>
+    </div>
+    <div class="modal-err" id="m-err"></div>
+    <button class="modal-submit" onclick="submitSticker()">Add Sticker</button>
+  </div>
+</div>
+
 </body>
 </html>
