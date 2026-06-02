@@ -442,6 +442,13 @@
   }
   .modal-submit:hover { filter: brightness(1.1); transform: translateY(-1px); }
   .modal-submit:active { transform: scale(.97); }
+
+  .modal-input select, select.modal-input {
+    -webkit-appearance: none; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%234a5c99' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center;
+    padding-right: 36px;
+  }
 </style>
 </head>
 <body>
@@ -521,11 +528,19 @@
       <button class="modal-type-btn dup" id="mtype-dup" onclick="setModalType('dup')">🔁 Duplicate</button>
     </div>
     <div class="modal-field">
-      <label class="modal-label" for="m-num">Sticker number</label>
-      <input class="modal-input" id="m-num" type="number" min="0" max="994" placeholder="e.g. 42" inputmode="numeric"/>
+      <label class="modal-label" for="m-country">Country / Section</label>
+      <select class="modal-input" id="m-country" onchange="updatePosOptions()">
+        <option value="">— Select —</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <label class="modal-label" for="m-pos">Sticker position</label>
+      <select class="modal-input" id="m-pos">
+        <option value="">— Select country first —</option>
+      </select>
     </div>
     <div class="modal-field" id="m-copies-field" style="display:none">
-      <label class="modal-label">Extra copies (duplicates)</label>
+      <label class="modal-label">Extra copies</label>
       <div class="modal-copies-row">
         <button class="modal-type-btn" style="flex:0;padding:12px 18px;font-size:20px" onclick="adjCopies(-1)">−</button>
         <input class="modal-input" id="m-copies" type="number" min="1" max="10" value="1" inputmode="numeric" style="text-align:center"/>
@@ -701,13 +716,7 @@
     } else {
       var remaining = (dupsBase[n] || 0) - (tradedCounts[n] || 0);
       chip.className = 'sticker-chip dup' + (remaining === 0 ? ' traded' : '');
-      chip.textContent = sec[3] + ' ' + pos;
-      if (remaining > 0) {
-        var badge = document.createElement('span');
-        badge.className = 'dup-badge';
-        badge.textContent = 'x' + remaining;
-        chip.appendChild(badge);
-      }
+      chip.textContent = sec[3] + ' ' + pos + (remaining > 0 ? ' ×' + remaining : '');
       chip.addEventListener('click', function(){ toggleTraded(this, n, sec); });
     }
     return chip;
@@ -826,31 +835,23 @@
     var base = dupsBase[n] || 0;
     var traded = tradedCounts[n] || 0;
     var remaining = base - traded;
+    var pos = String(n - sec[0] + (sec[0] === 0 ? 0 : 1)).padStart(2,'0');
     if (remaining > 0) {
-      // decrement: mark one as traded
       tradedCounts[n] = traded + 1;
       remaining--;
-      var badge = chip.querySelector('.dup-badge');
       if (remaining === 0) {
         chip.classList.add('traded');
-        if (badge) badge.remove();
+        chip.textContent = sec[3] + ' ' + pos;
         showToast('All ' + sec[3] + ' duplicates traded!');
       } else {
-        if (badge) badge.textContent = 'x' + remaining;
+        chip.textContent = sec[3] + ' ' + pos + ' ×' + remaining;
         showToast('Traded 1 · ' + remaining + ' left');
       }
     } else {
-      // undo: add one back
       tradedCounts[n] = Math.max(0, traded - 1);
       remaining = base - tradedCounts[n];
       chip.classList.remove('traded');
-      var badge = chip.querySelector('.dup-badge');
-      if (!badge) {
-        badge = document.createElement('span');
-        badge.className = 'dup-badge';
-        chip.appendChild(badge);
-      }
-      badge.textContent = 'x' + remaining;
+      chip.textContent = sec[3] + ' ' + pos + ' ×' + remaining;
       showToast('Undo · ' + remaining + ' available');
     }
     updateStats();
@@ -929,11 +930,42 @@
   // ── ADD STICKER MODAL ──
   var modalType = 'miss';
 
+  // Populate country dropdown
+  (function() {
+    var sel = document.getElementById('m-country');
+    SECTIONS.forEach(function(sec) {
+      var opt = document.createElement('option');
+      opt.value = sec[0] + ',' + sec[1] + ',' + sec[3];
+      opt.textContent = sec[4] + ' ' + sec[2];
+      sel.appendChild(opt);
+    });
+  })();
+
+  function updatePosOptions() {
+    var sel = document.getElementById('m-country');
+    var posSel = document.getElementById('m-pos');
+    posSel.innerHTML = '';
+    if (!sel.value) {
+      posSel.innerHTML = '<option value="">— Select country first —</option>';
+      return;
+    }
+    var parts = sel.value.split(',');
+    var start = +parts[0], end = +parts[1], code = parts[2];
+    for (var i = start; i <= end; i++) {
+      var posNum = String(i - start + (start === 0 ? 0 : 1)).padStart(2,'0');
+      var opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = code + ' ' + posNum + ' (#' + i + ')';
+      posSel.appendChild(opt);
+    }
+  }
+
   document.getElementById('fab-btn').addEventListener('click', function(){
     document.getElementById('modal-overlay').classList.add('open');
-    document.getElementById('m-num').value = '';
+    document.getElementById('m-country').value = '';
+    document.getElementById('m-pos').innerHTML = '<option value="">— Select country first —</option>';
     document.getElementById('m-err').textContent = '';
-    document.getElementById('m-num').focus();
+    document.getElementById('m-copies').value = 1;
   });
   document.getElementById('modal-overlay').addEventListener('click', function(e){
     if (e.target === this) closeModal();
@@ -956,22 +988,18 @@
   }
 
   function submitSticker() {
-    var numEl = document.getElementById('m-num');
     var errEl = document.getElementById('m-err');
-    var n = parseInt(numEl.value, 10);
     errEl.textContent = '';
-    numEl.classList.remove('err');
-
-    if (isNaN(n) || n < 0 || n >= TOTAL) {
-      errEl.textContent = 'Enter a valid sticker number (0–' + (TOTAL-1) + ')';
-      numEl.classList.add('err');
+    var posVal = document.getElementById('m-pos').value;
+    if (!posVal) {
+      errEl.textContent = 'Please select a country and sticker position.';
       return;
     }
+    var n = +posVal;
 
     if (modalType === 'miss') {
       if (!owned.has(n)) {
-        errEl.textContent = 'Sticker ' + n + ' is already in the missing list.';
-        numEl.classList.add('err');
+        errEl.textContent = 'That sticker is already in the missing list.';
         return;
       }
       owned.delete(n);
@@ -979,26 +1007,17 @@
       renderAll();
       updateStats();
       closeModal();
-      showToast('Added #' + n + ' to missing');
+      showToast('Added #' + n + ' to missing ✅');
     } else {
       var copies = Math.max(1, parseInt(document.getElementById('m-copies').value, 10) || 1);
-      if (dupsBase[n]) {
-        dupsBase[n] += copies;
-      } else {
-        dupsBase[n] = copies;
-      }
+      dupsBase[n] = (dupsBase[n] || 0) + copies;
       recompute();
       renderAll();
       updateStats();
       closeModal();
-      showToast('Added #' + n + ' as duplicate (x' + (dupsBase[n]) + ')');
+      showToast('Added #' + n + ' as duplicate ×' + dupsBase[n]);
     }
   }
-
-  // Allow Enter key in number input
-  document.getElementById('m-num').addEventListener('keydown', function(e){
-    if (e.key === 'Enter') submitSticker();
-  });
 
   window.setModalType = setModalType;
   window.adjCopies = adjCopies;
