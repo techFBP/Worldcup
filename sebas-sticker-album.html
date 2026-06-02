@@ -519,7 +519,7 @@
 
   function recompute() {
     missingNums = [];
-    for (var i=1; i<=TOTAL; i++) if (!owned.has(i)) missingNums.push(i);
+    for (var i=0; i<TOTAL; i++) if (!owned.has(i)) missingNums.push(i);
     dupNums = Object.keys(dupsBase).map(Number).sort(function(a,b){return a-b;});
   }
   recompute();
