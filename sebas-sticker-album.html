@@ -716,7 +716,13 @@
     } else {
       var remaining = (dupsBase[n] || 0) - (tradedCounts[n] || 0);
       chip.className = 'sticker-chip dup' + (remaining === 0 ? ' traded' : '');
-      chip.textContent = sec[3] + ' ' + pos + (remaining > 0 ? ' ×' + remaining : '');
+      chip.textContent = sec[3] + ' ' + pos;
+      if (remaining > 0) {
+        var badge = document.createElement('span');
+        badge.className = 'dup-badge';
+        badge.textContent = 'x' + remaining;
+        chip.appendChild(badge);
+      }
       chip.addEventListener('click', function(){ toggleTraded(this, n, sec); });
     }
     return chip;
@@ -839,19 +845,26 @@
     if (remaining > 0) {
       tradedCounts[n] = traded + 1;
       remaining--;
+      var badge = chip.querySelector('.dup-badge');
       if (remaining === 0) {
         chip.classList.add('traded');
-        chip.textContent = sec[3] + ' ' + pos;
+        if (badge) badge.remove();
         showToast('All ' + sec[3] + ' duplicates traded!');
       } else {
-        chip.textContent = sec[3] + ' ' + pos + ' ×' + remaining;
+        if (badge) badge.textContent = 'x' + remaining;
         showToast('Traded 1 · ' + remaining + ' left');
       }
     } else {
       tradedCounts[n] = Math.max(0, traded - 1);
       remaining = base - tradedCounts[n];
       chip.classList.remove('traded');
-      chip.textContent = sec[3] + ' ' + pos + ' ×' + remaining;
+      var badge = chip.querySelector('.dup-badge');
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'dup-badge';
+        chip.appendChild(badge);
+      }
+      badge.textContent = 'x' + remaining;
       showToast('Undo · ' + remaining + ' available');
     }
     updateStats();
