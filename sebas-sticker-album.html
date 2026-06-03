@@ -455,6 +455,44 @@
     padding-right: 36px;
   }
 </style>
+<!-- Firebase -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAFf2L1_HcF5gIAf_l248ICGEQRZnVSmDA",
+    authDomain: "sebas-sticker-album.firebaseapp.com",
+    projectId: "sebas-sticker-album",
+    storageBucket: "sebas-sticker-album.firebasestorage.app",
+    messagingSenderId: "504212247679",
+    appId: "1:504212247679:web:132ff69dde35db1cfb1b4a"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const docRef = doc(db, 'album', 'sebas');
+
+  // Save to Firestore
+  window._fbSave = async function(ownedSet, dupsObj) {
+    await setDoc(docRef, {
+      owned: Array.from(ownedSet).sort(function(a,b){return a-b;}),
+      dups: dupsObj
+    });
+  };
+
+  // onSnapshot fires immediately with current data, then on every change.
+  // If _fbApply isn't ready yet (main script still loading), store data and
+  // let the main script pick it up via window._fbPendingData.
+  onSnapshot(docRef, function(snap) {
+    if (!snap.exists()) return;
+    var data = snap.data();
+    window._fbPendingData = data; // always cache latest
+    if (typeof window._fbApply === 'function') {
+      window._fbApply(data.owned, data.dups);
+    }
+  });
+</script>
 </head>
 <body>
 
@@ -649,12 +687,29 @@
 
   var owned = expandRanges(OWNED_STR);
   var dupsBase = parseDups(DUPS_STR);
-  var owned = expandRanges(OWNED_STR);
-  var dupsBase = parseDups(DUPS_STR);
   var gotSet = new Set();
   var tradedCounts = {}; // n -> how many traded so far
   var missingNums = [];
   var dupNums = [];
+
+  // Apply data from Firebase (called on load and on real-time updates)
+  window._fbApply = function(ownedArr, dupsObj) {
+    owned = new Set(ownedArr);
+    // Convert any string keys to numbers
+    var fixed = {};
+    Object.keys(dupsObj).forEach(function(k){ fixed[+k] = dupsObj[k]; });
+    dupsBase = fixed;
+    gotSet.clear();
+    tradedCounts = {};
+    recompute();
+    renderAll();
+    updateStats();
+  };
+
+  // If Firebase already delivered data before this script ran, apply it now
+  if (window._fbPendingData) {
+    window._fbApply(window._fbPendingData.owned, window._fbPendingData.dups);
+  }
 
   function recompute() {
     missingNums = [];
@@ -893,6 +948,8 @@
       if (dupsBase[n] <= 0) delete dupsBase[n];
     });
     tradedCounts = {};
+    // Save to Firebase (syncs across all devices)
+    if (window._fbSave) window._fbSave(owned, dupsBase);
     recompute();
     renderAll();
     updateStats();
